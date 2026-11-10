@@ -46,6 +46,9 @@ py app\cockpit.py
 ## Mitmachen
 Fehler gefunden, Idee? Gern als **Issue** hier im Repository.
 
+## Code-Signatur & Datenschutz
+Siehe [`CODE_SIGNING_POLICY.md`](CODE_SIGNING_POLICY.md). Das Programm überträgt keine Daten ins Internet.
+
 ## Lizenz
 MIT – siehe [`LICENSE.txt`](LICENSE.txt). Kostenlos, auch gewerblich, ohne Gewähr.
 Komponenten Dritter: [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
