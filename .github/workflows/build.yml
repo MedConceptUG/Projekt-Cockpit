@@ -1,0 +1,84 @@
+name: Windows-Programm bauen
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Abhängigkeiten installieren
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Versionsnummer setzen (aus Datei VERSION)
+        id: ver
+        run: python tools/set_version.py
+
+      - name: Gibt es diese Version schon als Release?
+        id: chk
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "v${{ steps.ver.outputs.version }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then echo "neu=nein" >> "$GITHUB_OUTPUT"; else echo "neu=ja" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Browser-Version (eine HTML-Datei) erzeugen
+        run: python tools/build_standalone.py
+
+      - name: Programm bauen
+        run: >
+          pyinstaller --noconfirm --onefile --windowed
+          --name Projekt-Cockpit
+          --add-data "web;web"
+          --paths app
+          --hidden-import windialogs
+          --hidden-import version
+          --collect-all webview
+          app/cockpit.py
+
+      - name: Kurztest – Programmkern und Windows-Dialoge lassen sich laden
+        run: |
+          python -c "import sys; sys.path.insert(0,'app'); import cockpit; a=cockpit.Api(); print(cockpit.VERSION, a.exists(['C:\\Windows','C:\\gibt-es-nicht']), a.get_info())"
+          python -c "import sys; sys.path.insert(0,'app'); import cockpit; a=cockpit.Api(); bad=[n for n in dir(a) if not n.startswith('_') and not callable(getattr(a,n))]; print('oeffentliche Nicht-Funktionen:', bad); assert not bad, bad"
+          python -c "import sys, ctypes; sys.path.insert(0,'app'); import windialogs as w; n=ctypes.sizeof(w.OPENFILENAMEW); print('OPENFILENAMEW', n); assert n==152, n; print(repr(w._filter(('Excel (*.xlsx)',))), 'Zwischenablage:', w.clipboard_files())"
+
+      - name: Testversion ablegen (ohne Release)
+        if: steps.chk.outputs.neu != 'ja'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Projekt-Cockpit-test-${{ github.run_number }}
+          path: |
+            dist/Projekt-Cockpit.exe
+            dist/projekt-cockpit.html
+
+      - name: Release veröffentlichen (nur bei neuer Versionsnummer)
+        if: steps.chk.outputs.neu == 'ja'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: Projekt-Cockpit ${{ steps.ver.outputs.version }}
+          make_latest: true
+          body: |
+            **Projekt-Cockpit.exe** herunterladen und starten – keine Installation nötig (Windows 10/11).
+            Warnt Windows beim ersten Start: *Weitere Informationen → Trotzdem ausführen* (oder Rechtsklick → Eigenschaften → Zulassen).
+            **projekt-cockpit.html** ist die Browser-Version (ohne direktes Öffnen lokaler Dateien).
+
+            Kostenlos und quelloffen unter MIT-Lizenz. Deine Daten bleiben in deiner Excel-Datei.
+          files: |
+            dist/Projekt-Cockpit.exe
+            dist/projekt-cockpit.html
+            THIRD-PARTY-NOTICES.md
+            LICENSE.txt
