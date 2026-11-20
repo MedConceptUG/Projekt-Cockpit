@@ -99,7 +99,7 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .tl{overflow:auto;border:1px solid var(--line);border-radius:11px;background:var(--panel);max-height:calc(100vh - 140px)}
 .tl-in{position:relative}
 .tl-axis{position:sticky;top:0;z-index:6;display:flex;height:42px;background:var(--panel);border-bottom:1px solid var(--line)}
-.tl-lab{position:sticky;left:0;z-index:5;width:210px;flex:none;background:var(--panel);border-right:1px solid var(--line)}
+.tl-lab{position:sticky;left:0;z-index:5;width:var(--lw,210px);flex:none;background:var(--panel);border-right:1px solid var(--line)}
 .tl-axis .tl-lab{z-index:7;font-size:12px;color:var(--muted);padding:12px 10px}
 .tl-trk{position:relative;flex:none}
 .tl-m{position:absolute;top:0;height:21px;font-size:12px;font-weight:600;padding:3px 6px;border-left:1px solid var(--line);white-space:nowrap;overflow:hidden}
@@ -115,7 +115,10 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .tl-row.lane .tl-lab .ln{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:16px}
 .tl-row.lane .tl-lab .bar-c{position:absolute;left:12px;top:5px;bottom:5px}
 table.vt{border-collapse:collapse;width:100%;font-size:13px}.vt td{padding:4px 6px;border-bottom:1px solid var(--line)}
-.rlab{position:absolute;left:24px;right:6px;height:20px;line-height:20px;font-size:11.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;border-radius:4px;padding:0 4px}
+.rlab{position:absolute;left:24px;right:6px;height:24px;display:flex;align-items:center;font-size:11.5px;color:var(--ink);overflow:hidden;cursor:pointer;border-radius:4px;padding:0 4px}
+.rlab .rlw{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:12px;white-space:normal;overflow-wrap:anywhere}
+.lw-h{position:absolute;right:-4px;top:0;bottom:0;width:8px;cursor:col-resize;z-index:9}.lw-h:hover,.lw-h.on{background:color-mix(in srgb,var(--acc) 35%,transparent)}
+.tl-axis .tl-lab{position:sticky}
 .rlab:hover{background:var(--panel2)}.rlab.sel{background:color-mix(in srgb,var(--acc) 14%,var(--panel))}
 .rlab i{font-style:normal;color:var(--muted)}.rlab .rt.erledigt{color:var(--muted);text-decoration:line-through}.rlab .rt.late{color:var(--late);font-weight:600}.rlab .rt.ev{color:var(--muted)}
 .rlab.du{color:var(--muted);font-size:11px;padding-left:14px}
@@ -348,7 +351,7 @@ table.log{border-collapse:collapse;width:100%;background:var(--panel);border:1px
  .brand,.sec,#projFilter,#deptFilter,.foot{display:none}
  .nav{display:flex;overflow-x:auto;gap:2px;width:100%}.nav button{width:auto}.nav kbd{display:none}
  .top{flex-wrap:wrap;padding:10px 16px}.top #search{width:100%}
- #view{padding:14px 16px}.tl-lab{width:140px}
+ #view{padding:14px 16px}
  .form{grid-template-columns:1fr}#drawer{width:100%}
 }
 </style>
@@ -562,7 +565,7 @@ function persist(){undoTrack();S.meta.saved=new Date().toISOString();cacheLocal(
 function load(d){S.projects=d.projects||[];S.depts=d.depts||[];S.events=d.events||[];S.todos=d.todos||[];S.log=d.log||[];S.meta=Object.assign({user:'Ich'},d.meta||{});
   if(!S.depts.length)S.depts=DEFAULT_DEPTS.map(([n,c])=>({id:uid(),name:n,color:c}));
   S.templates=d.templates||[];S.vacations=d.vacations||[];S.events.forEach(e=>{e.causes=e.causes||[]});S.todos.forEach(t=>{t.causes=t.causes||[];normSteps(t)});S.projects.forEach(p=>{p.links=p.links||[];p.phases=p.phases||[];p.depts=(p.depts||[]).filter(id=>D(id))});S.types=(d.types&&d.types.length?d.types:DEFAULT_TYPES.map(([key,icon,label,sig])=>({key,icon,label,sig}))).map(t=>({...t}));if(!S.types.some(t=>t.key==='review'))S.types.push({key:'review',icon:'📋',label:'Design Review',sig:'neutral'});S.events.forEach(e=>{if(!S.types.some(t=>t.key===e.type))e.type=S.types.some(t=>t.key==='info')?'info':S.types[0].key});rebuildTypes();[...S.events,...S.todos].forEach(normItem);UNDO.past=[];UNDO.future=[];UNDO.last=dataSnap()}
-function saveUI(){try{const {view,pf,df,zoom,collapsed,showDone,arrows,focus,scale}=UI;localStorage.setItem(UIKEY,JSON.stringify({view,pf,df,zoom,collapsed,showDone,arrows,focus,scale}))}catch(e){}}
+function saveUI(){try{const {view,pf,df,zoom,collapsed,showDone,arrows,focus,scale,lw}=UI;localStorage.setItem(UIKEY,JSON.stringify({view,pf,df,zoom,collapsed,showDone,arrows,focus,scale,lw}))}catch(e){}}
 function loadUI(){try{Object.assign(UI,JSON.parse(localStorage.getItem(UIKEY))||{})}catch(e){}if(!['cockpit','gantt','projects','log'].includes(UI.view))UI.view='cockpit'}
 
 /* ================= Excel ================= */
@@ -1240,12 +1243,12 @@ function vCockpit(){
 }
 
 /* ================= Ansicht: Gantt ================= */
-const LW=210,SUB=26,LH=26;
+let LW=210;const SUB=26,LH=26,LW_MIN=140,LW_MAX=520;
 let G={start:'',px:20,x0:0,pos:{},justDragged:false,dropPending:false};
 function evIco(e,role,css,ex){let sg=sigOf(e);const co=critOpen(e);if(sg==='kritisch'&&!co&&critResolved(e))sg='erledigt';const dn=evDone(e);
   return `<i class="evi ${role} sig-${sg} ${co?'copen':''} ${dn?'':'plan'} ${UI.sel===e.id?'sel':''}${ex||''}" data-id="${e.id}" style="${css}" onclick="event.stopPropagation();selItem('${e.id}')" ondblclick="event.stopPropagation();editEvent('${e.id}')" onmouseenter="hov('${e.id}',1)" onmouseleave="hov('${e.id}',0)" title="${esc(({st:'▶ Start-Event',en:'■ Abschluss-Event',du:'● Event während des ToDos'})[role]+' · '+fmt(e.date)+(dn?' · eingetreten':' · geplant')+' · '+tLabel(e.type)+' · '+e.title+(e.who?' · '+e.who:''))}">${TICON[e.type]||'•'}</i>`}
 let _rzT=null;window.addEventListener('resize',()=>{clearTimeout(_rzT);_rzT=setTimeout(()=>{if(UI.view==='gantt'&&!document.querySelector('#modal.open'))render()},250)});
-function vGantt(){
+function vGantt(){LW=Math.max(LW_MIN,Math.min(LW_MAX,UI.lw||210));
   const projs=[...S.projects.filter(p=>pVis(p.id)),...(pVis('')&&[...S.events,...S.todos].some(x=>!pids(x).length&&dVis(x.deptId))?[GENERAL]:[])];if(!projs.length)return emptyProjects();
   const td=TODAY(),px=UI.zoom;let ds=[addDays(td,-21),addDays(td,90)];
   projs.forEach(p=>(p.phases||[]).forEach(ph=>{if(ph.start)ds.push(ph.start);if(ph.end)ds.push(ph.end)}));
@@ -1325,7 +1328,7 @@ function vGantt(){
       /* Bezeichnungen links, jeweils auf Höhe ihrer Zeile */
       let rl='';for(let r=0;r<occ.length;r++){const L=its.filter(it=>it.r===r);
         if(L.length){L.sort((a,b)=>((a.k==='t'&&a.o.status==='erledigt')-(b.k==='t'&&b.o.status==='erledigt')));const tx=L.map(it=>it.k==='t'?`<span class="rt ${it.o.status} ${it.o.status!=='erledigt'&&it.o.due&&it.o.due<td?'late':''}">${esc(it.o.title)}</span>`:`<span class="rt ev">${TICON[it.o.type]||'•'} ${esc(it.o.title)}</span>`).join('<i> · </i>');
-          rl+=`<div class="rlab ${L.some(it=>UI.sel===it.o.id)?'sel':''}" style="top:${LH+6+r*SUB}px" onclick="event.stopPropagation();selItem('${L[0].o.id}')" ondblclick="event.stopPropagation();${L[0].k==='t'?'editTodo':'editEvent'}('${L[0].o.id}')" title="${esc(L.map(it=>it.o.title).join(' · '))}">${tx}</div>`;continue}
+          rl+=`<div class="rlab ${L.some(it=>UI.sel===it.o.id)?'sel':''}" style="top:${LH+4+r*SUB}px" onclick="event.stopPropagation();selItem('${L[0].o.id}')" ondblclick="event.stopPropagation();${L[0].k==='t'?'editTodo':'editEvent'}('${L[0].o.id}')" title="${esc(L.map(it=>it.o.title).join(' · '))}"><span class="rlw">${tx}</span></div>`;continue}
         const D_=its.filter(it=>it.du.length&&r>it.r&&r<=it.r+it.du.length).map(it=>it.du[r-it.r-1]);
         if(D_.length)rl+=`<div class="rlab du" style="top:${LH+6+r*SUB}px" onclick="event.stopPropagation();selItem('${D_[0].id}')" title="${esc(D_.map(e=>e.title).join(' · '))}">${D_.map(e=>`● ${esc(e.title)}`).join('<i> · </i>')}</div>`}
       const nOpen=S.todos.filter(t=>inP(t,p.id)&&(t.deptId||'')===did&&t.status!=='erledigt').length,nNo=S.todos.filter(t=>inP(t,p.id)&&(t.deptId||'')===did&&!t.due&&!t.start&&t.status!=='erledigt').length;
@@ -1364,11 +1367,17 @@ function vGantt(){
    <button class="${UI.focus?'pri':''}" onclick="UI.focus=!UI.focus;UI.sel=null;render()" title="Blendet alles aus außer kritischen Events mit ihren Folgen und überfälligen ToDos">⚠ Fokus: Kritisches</button>
    <span class="legend"><span><span class="lg sig-kritisch copen"></span>kritisch, ohne Maßnahme</span><span><span class="lg sig-kritisch"></span>kritisch, in Bearbeitung</span><span><span class="lg" style="border:2px dashed color-mix(in srgb,var(--late) 50%,transparent)"></span>kritisch, erledigt</span><span><span class="lg sig-positiv"></span>positiv</span><span><span class="lg"></span>neutral</span><span>▭ ToDo · ▨ wartet · <b class="late">rot</b> = überfällig · ⧉ <span style="color:var(--acc)">┆</span> gleicher Punkt in mehreren Projekten</span></span></div>
    <div class="evpal" title="Symbol mit der Maus greifen und in einen Balken ziehen (Event während des ToDos) – oder an eine freie Stelle (freies Event)"><span class="muted">Event einfügen – Symbol in den Balken ziehen:</span>${S.types.map(t=>`<span class="evp" onmousedown="palDown(event,'${t.key}')" title="${esc(t.label)}">${t.icon}</span>`).join('')}</div>
-   <div class="tl" id="tl" onclick="if(!G.justDragged&&UI.sel){UI.sel=null;render()}"><div class="tl-in" style="width:${LW+W}px;height:${y}px;zoom:${ZS()}">${lines}<div class="today" style="left:${tdX}px"></div>${msl}
+   <div class="tl" id="tl" onclick="if(!G.justDragged&&UI.sel){UI.sel=null;render()}"><div class="tl-in" style="width:${LW+W}px;height:${y}px;zoom:${ZS()};--lw:${LW}px">${lines}<div class="today" style="left:${tdX}px"></div>${msl}
    <svg class="arrows" width="${LW+W}" height="${y}"><defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--muted)"/></marker><marker id="ahh" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--acc)"/></marker></defs>${copies}${arrows}</svg>
    <svg id="ghost" class="arrows ghost" width="${LW+W}" height="${y}"></svg>
-   <div class="tl-axis" style="height:${AXH}px"><div class="tl-lab">Projekt · Abteilung</div><div class="tl-trk" style="width:${W}px">${axis}</div></div>${rows}</div></div>`;
+   <div class="tl-axis" style="height:${AXH}px"><div class="tl-lab">Projekt · Abteilung<i class="lw-h" onmousedown="lwDown(event)" ondblclick="event.stopPropagation();UI.lw=210;saveUI();render()" title="Spalte breiter / schmaler ziehen (Doppelklick = Standardbreite)"></i></div><div class="tl-trk" style="width:${W}px">${axis}</div></div>${rows}</div></div>`;
 }
+/* Breite der linken Spalte mit der Maus ziehen */
+function lwDown(ev){ev.preventDefault();ev.stopPropagation();const x0=ev.clientX,w0=LW,h=ev.target;h.classList.add('on');let t=null;
+  const mv=e=>{const w=Math.round(Math.max(LW_MIN,Math.min(LW_MAX,w0+(e.clientX-x0)/ZS())));if(w===UI.lw)return;UI.lw=w;const ti=$('#tl .tl-in');if(ti)ti.style.setProperty('--lw',w+'px');
+    if(!t)t=setTimeout(()=>{t=null;const tl=$('#tl'),sl=tl?.scrollLeft,st=tl?.scrollTop;render();const t2=$('#tl');if(t2){t2.scrollLeft=sl;t2.scrollTop=st}},80)};
+  const up=()=>{document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);saveUI();render()};
+  document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up)}
 /* Pfeil nur waagerecht/senkrecht: Ursache → rechts raus, senkrecht, waagerecht in die Wirkung */
 /* Pfeile zu/von Event-Symbolen im Balken: senkrecht von oben/unten an das Symbol, waagerecht nur in der Lücke zwischen den Zeilen – nie unter dem Balken versteckt */
 function orthoX(A,B){if(!A.role&&!B.role)return ortho(A,B);
@@ -1957,6 +1966,7 @@ function help(){modal('Kurzanleitung',`<div class="help">
  <p><b>Meilensteine & Design Reviews:</b> Events der Art „🚩 Meilenstein“ oder „📋 Design Review“ erscheinen als senkrechte Linie über das ganze Projekt (Allgemein: über den ganzen Plan), Beschriftung oben im Projektkopf; gepunktet = geplant. In der Detail-Leiste eines Reviews/Meilensteins fixiert <b>„📄 Review-Bericht“</b> den Stand seit dem letzten Review: Gantt im Zeitraum, alle Termine und Aufgaben, offene Punkte zum Stichtag (offene ToDos, kritische Events, übergangene Checklistenpunkte, nicht eingetretene geplante Events), Historie und ein Unterschriftenfeld – als PDF oder als Word-Datei (im Desktop-Programm wird die Word-Datei direkt am Review verknüpft). Die Erstellung wird in der Historie festgehalten.</p>
  <p><b>Rückgängig:</b> <b>Strg + Z</b> macht die letzte Änderung rückgängig (mehrfach möglich), <b>Strg + Y</b> bzw. Strg + Umschalt + Z stellt sie wieder her. Die Historie bleibt dabei vollständig – das Rückgängigmachen wird dort selbst als Eintrag vermerkt. In Eingabefeldern wirkt Strg + Z wie gewohnt auf den Text.</p>
  <p><b>PDF mit Checklisten:</b> Beim PDF-Export (Abteilungsseiten) und im Review-Bericht steht unter jeder Aufgabe auf Wunsch ihre Checkliste mit allen Punkten: ☑ erledigt (mit Datum), ☐ offen, ⊘ entfällt, ⚠ bewusst übergangen mit Begründung, Risiko, wer akzeptiert hat und bis wann nachzuholen ist. ★ = Pflichtpunkt.</p>
+ <p><b>Linke Spalte:</b> Die Spalte „Projekt · Abteilung“ lässt sich oben an ihrem rechten Rand mit der Maus breiter oder schmaler ziehen (Doppelklick = Standardbreite). Lange Bezeichnungen brechen auf zwei Zeilen um; der volle Text steht im Tooltip.</p>
  <p><b>Urlaub:</b> „🏖 Urlaub“ über dem Gantt. Ohne „Wer“ gilt ein Zeitraum für alle (graue Spalte, z. B. Betriebsurlaub, Feiertage), mit „Wer“ nur für ToDos dieser Person. Balken, die darüber laufen, werden um die Urlaubstage verlängert bzw. ein Start im Urlaub dahinter verschoben (mit Vorschau), Folgen rücken nach. Auch beim Verschieben mit der Maus behält ein ToDo seine Arbeitstage. Im Balken ist die Urlaubszeit schraffiert.</p>
  <p><b>Größe:</b> − / ＋ über dem Gantt oder <b>Strg + Mausrad</b> vergrößert bzw. verkleinert die ganze Darstellung (Schrift, Balken, Symbole); Klick auf die Prozentzahl = 100 %. Jahr/Quartal/Monat/Woche bestimmen weiterhin den Zeitmaßstab.</p>
  <p><b>Gantt:</b> Klick auf ein Element hebt die gesamte Kette hervor und zeigt rechts Ursache, Wirkung und Verlauf. Doppelklick öffnet den Editor, Doppelklick in eine leere Swimlane legt dort ein ToDo am angeklickten Datum an.</p>
