@@ -1136,6 +1136,7 @@ function editProject(id){
       <div id="phases">${(p.phases||[]).map(phaseRow).join('')}</div></div></div>`,
   [...(id?[{l:'Projekt löschen',c:'danger left',f:()=>delProject(id)}]:[]),{l:'Abbrechen',f:closeModal},{l:'Speichern',c:'pri',f:()=>saveProject(id)}]);renderLE();
 }
+function attachedIn(pid){const a=new Set();S.todos.filter(t=>inP(t,pid)).forEach(t=>{if(t.eventId)a.add(t.eventId);if(t.endEventId)a.add(t.endEventId)});S.events.forEach(e=>{if(e.todoId&&T(e.todoId)&&inP(T(e.todoId),pid))a.add(e.id)});return a}
 function saveProject(id){
   const name=$('#f_name').value.trim();if(!name){toast('Name fehlt.');return}
   const phases=[...document.querySelectorAll('#phases .phrow')].map(r=>({id:r.dataset.id,name:r.querySelector('.ph-n').value.trim(),start:r.querySelector('.ph-s').value,end:r.querySelector('.ph-e').value})).filter(ph=>ph.name).sort((a,b)=>(a.start||'').localeCompare(b.start||''));
@@ -1145,7 +1146,7 @@ function saveProject(id){
   const d={name,code:$('#f_code').value.trim(),color:$('#f_color').value,status:$('#f_pstatus').value,owner:$('#f_owner').value.trim(),goal:$('#f_goal').value,phases,depts,links:LE.slice()};
   closeModal();
   /* abgewählte Abteilung hat noch Einträge in diesem Projekt? → fragen, wohin damit (sonst bliebe die Zeile im Gantt stehen) */
-  if(id){const rem=old.filter(x=>!chosen.includes(x)).map(dep=>({dep,items:[...S.todos,...S.events].filter(x=>inP(x,id)&&(x.deptId||'')===dep)})).filter(c=>c.items.length);
+  if(id){const att=attachedIn(id),rem=old.filter(x=>!chosen.includes(x)).map(dep=>({dep,items:[...S.todos,...S.events].filter(x=>inP(x,id)&&(x.deptId||'')===dep&&!att.has(x.id))})).filter(c=>c.items.length);
     if(rem.length){const opts=dep=>`<option value="__keep">nicht entfernen – Abteilung bleibt im Projekt</option>${depts.filter(x=>x!==dep&&D(x)).map(x=>`<option value="${x}">verschieben nach: ${esc(D(x).name)}</option>`).join('')}${S.depts.filter(x=>x.id!==dep&&!depts.includes(x.id)).map(x=>`<option value="${x.id}">verschieben nach: ${esc(x.name)} (nicht im Projekt)</option>`).join('')}<option value="__del">aus dem Projekt entfernen (ToDos/Events nur in diesem Projekt werden gelöscht)</option>`;
       modal('Abteilung aus dem Projekt nehmen',`<p>Die abgewählte Abteilung hat in „${esc(d.name)}“ noch Einträge. Solange sie dort ToDos oder Events hat, bleibt ihre Zeile im Gantt stehen. Was soll damit passieren?</p>
         ${rem.map(c=>`<div style="margin:10px 0"><b>${esc(D(c.dep)?.name||'?')}</b> – ${c.items.length} Einträge: <span class="muted">${c.items.slice(0,4).map(x=>esc(trunc(x.title,30))).join(', ')}${c.items.length>4?' …':''}</span><br><select id="rm_${c.dep}" style="margin-top:4px;width:100%">${opts(c.dep)}</select></div>`).join('')}
@@ -1321,7 +1322,8 @@ function vGantt(){LW=Math.max(LW_MIN,Math.min(LW_MAX,UI.lw||210));
     const open=S.todos.filter(t=>inP(t,p.id)&&t.status!=='erledigt').length;
     rows+=`<div class="tl-row ph-row" style="height:${phH}px;--c:${p.color}"><div class="tl-lab" ${p.id?`data-pid="${p.id}"`:''} onclick="toggleCollapse('${p.id}')" title="Ein-/Ausklappen"><span class="muted">${col?'▸':'▾'}</span><b>${esc(p.name)}</b><span class="muted" style="font-size:11.5px">${open}</span>${(()=>{const c=S.events.filter(e=>inP(e,p.id)&&critOpen(e)).length;return c?`<span class="cbadge" title="${c} kritische Events ohne Maßnahme">${c}</span>`:''})()}${p.id&&p.links?.length?`<button class="ghost sm" onclick="event.stopPropagation();showLinks('${p.id}')" title="Projekt-Links">📎${p.links.length}</button>`:''}${p.id?`<button class="ghost sm" onclick="event.stopPropagation();editProject('${p.id}')" title="Projekt bearbeiten">✎</button>`:''}</div><div class="tl-trk" ${p.id?`data-phrow="1" data-p="${p.id}" title="Leere Fläche aufziehen = neue Phase"`:''} style="width:${W}px">${phs}</div></div>`;
     y+=phH;if(col)return;
-    const used=[...new Set(items.map(x=>x.deptId||''))];
+    /* Events, die als Symbol in einem Balken dieses Projekts sitzen, erzeugen keine eigene Abteilungszeile */
+    const att=attachedIn(p.id),used=[...new Set(items.filter(x=>!att.has(x.id)).map(x=>x.deptId||''))];
     let lanes=[...(p.depts||[]).filter(D),...used.filter(d=>d&&D(d)&&!(p.depts||[]).includes(d))];if(used.includes(''))lanes.push('');
     lanes=lanes.filter(dVis);
     /* Events, die zu einem sichtbaren ToDo gehören, erscheinen als Symbol im Balken statt frei in der Zeile */
