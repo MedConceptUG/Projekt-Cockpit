@@ -1,7 +1,7 @@
 # Projekt-Cockpit
 
 **Ein Plan für Projekte und Tagesgeschäft – mit Ursache und Wirkung.**
-Kostenlos, quelloffen (MIT-Lizenz), ohne Installation, ohne Cloud: deine Daten liegen in deiner eigenen Excel-Datei.
+Kostenlos, quelloffen (MIT-Lizenz), ohne Installation, ohne Cloud: deine Daten liegen in einer eigenen Datei auf deinem Rechner oder Netzlaufwerk.
 
 Für Projektleiterinnen und Projektleiter jeder Branche, die mehrere Projekte und das Tagesgeschäft gleichzeitig steuern
 und jederzeit sehen wollen: **Wer macht was bis wann – und warum?**
@@ -25,7 +25,7 @@ Rechts unter **Releases** die neueste Version öffnen:
 - **projekt-cockpit.html** – Browser-Version (Edge/Chrome), läuft überall, nur ohne direktes Öffnen lokaler Dateien.
 
 ## Deine Daten
-Alles liegt in der Excel-Datei, die du im Programm wählst (z. B. auf deinem Netzlaufwerk) – lesbar und bearbeitbar auch ohne das Cockpit.
+Alles liegt in der Datendatei, die du im Programm wählst (z. B. auf deinem Netzlaufwerk): **JSON** (empfohlen, vollständig inkl. Historie) oder **Excel** (direkt in Excel bearbeitbar). Mit **Excel-Export** bekommst du jederzeit eine lesbare Excel-Datei zum Weitergeben, mit **JSON-Export** eine vollständige Sicherung.
 Das Programm sendet nichts ins Internet. Einstellungen und tägliche Sicherungskopien: `%APPDATA%\ProjektCockpit\`.
 
 ## Mit Python starten (statt exe)
@@ -39,7 +39,7 @@ py app\cockpit.py
 |---|---|
 | `web/index.html` | Oberfläche und Logik (läuft im Programm und im Browser) |
 | `web/xlsx.mini.min.js` | SheetJS – Excel lesen/schreiben |
-| `app/cockpit.py`, `app/windialogs.py` | Desktop-Kern (pywebview): Links öffnen, Dateidialoge, Excel-Datei, Sicherungen |
+| `app/cockpit.py`, `app/windialogs.py` | Desktop-Kern (pywebview): Links öffnen, Dateidialoge, Datendatei (JSON/Excel), Sicherungen |
 | `tools/` | Build-Hilfen (Browser-Version, Versionsnummer) |
 | `VERSION` | aktuelle Versionsnummer – ein neues Release entsteht, wenn sie erhöht wird |
 

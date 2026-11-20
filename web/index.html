@@ -369,8 +369,9 @@ table.log{border-collapse:collapse;width:100%;background:var(--panel);border:1px
    <div id="store"></div>
    <div class="btns" id="storeBtns"></div>
    <div class="btns">
-    <button class="sm" onclick="exportXLSX()" title="Alle Daten als Excel-Datei herunterladen">Excel-Export</button>
-    <button class="sm" onclick="$('#importFile').click()" title="Excel-Datei einlesen">Excel-Import</button>
+    <button class="sm" onclick="exportXLSX()" title="Alle Daten als Excel-Datei speichern – zum Lesen, Filtern, Weitergeben">Excel-Export</button>
+    <button class="sm" onclick="exportJSON()" title="Vollständige Sicherung als JSON-Datei">JSON-Export</button>
+    <button class="sm" onclick="$('#importFile').click()" title="Excel- oder JSON-Datei einlesen">Import</button>
    </div>
    <div class="btns">
     <button class="sm" onclick="settings()">Einstellungen</button>
@@ -397,7 +398,7 @@ table.log{border-collapse:collapse;width:100%;background:var(--panel);border:1px
 <div id="toast"></div>
 <div id="dragtip"></div>
 <datalist id="people"></datalist>
-<input type="file" id="importFile" accept=".xlsx,.xls,.xlsm" hidden>
+<input type="file" id="importFile" accept=".xlsx,.xls,.xlsm,.json" hidden>
 
 <script src="xlsx.mini.min.js"></script>
 <script>
@@ -657,15 +658,25 @@ function fromWorkbook(wb){
   return N;
 }
 const xlsxBytes=()=>XLSX.write(toWorkbook(),{bookType:'xlsx',type:'array',compression:true});
+/* ===== JSON als vollständige Datendatei (Excel bleibt für Import/Export) ===== */
+const isJson=n=>/\.json$/i.test(String(n||''));
+const kindOf=n=>isJson(n)?'JSON':'Excel';
+function dataJson(){return JSON.stringify({format:'projekt-cockpit',version:APP_VERSION,saved:new Date().toISOString(),data:S},null,1)}
+function parseJson(text){const o=JSON.parse(String(text).replace(/^\uFEFF/,''));const d=o&&o.data?o.data:o;
+  if(!d||!Array.isArray(d.todos)||!Array.isArray(d.events))throw new Error('Keine Projekt-Cockpit-Daten (ToDos/Events fehlen).');return d}
+const utf8b64=t=>b64of(new TextEncoder().encode(t));
+const b64utf8=b=>new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0)));
+const summary=N=>`${(N.projects||[]).length} Projekte · ${N.events.length} Events · ${N.todos.length} ToDos`;
+function exportJSON(){download(`cockpit-${TODAY()}.json`,dataJson(),'application/json')}
 async function deskSave(name,data){const u8=data instanceof Uint8Array?data:data instanceof ArrayBuffer?new Uint8Array(data):new TextEncoder().encode(String(data));const r=await API().save_as(name,b64of(u8));if(r&&r.ok)toast('Gespeichert: '+baseName(r.path),'Öffnen',()=>openLink(r.path));else if(r&&r.error)toast(r.error)}
 function b64of(u8){let s='';for(let i=0;i<u8.length;i+=0x8000)s+=String.fromCharCode.apply(null,u8.subarray(i,i+0x8000));return btoa(s)}
 function download(name,data,type){if(DESK)return deskSave(name,data);const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)}
 function exportXLSX(){download(`cockpit-${TODAY()}.xlsx`,xlsxBytes(),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')}
 function importData(N,label){load(N);UI.sel=null;UI.pf=UI.pf.filter(P);UI.df=UI.df.filter(D);S.log.unshift({id:uid(),ts:new Date().toISOString(),user:S.meta.user||'Ich',action:'eingelesen',kind:'system',ref:null,pid:null,text:label});persist();render()}
 $('#importFile').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
-  try{const N=fromWorkbook(XLSX.read(await f.arrayBuffer(),{type:'array'}));
-    if(!await askP(`„${f.name}“ einlesen?\n${N.projects.length} Projekte · ${N.events.length} Events · ${N.todos.length} ToDos\n\nDie aktuellen Daten im Cockpit werden ersetzt.`))return;
-    importData(N,'Excel-Import: '+f.name)}catch(err){info('Excel-Datei konnte nicht gelesen werden.\n'+(err.message||err))}};
+  try{const N=isJson(f.name)?parseJson(await f.text()):fromWorkbook(XLSX.read(await f.arrayBuffer(),{type:'array'}));
+    if(!await askP(`„${f.name}“ einlesen?\n${summary(N)}\n\nDie aktuellen Daten im Cockpit werden ersetzt.`))return;
+    importData(N,kindOf(f.name)+'-Import: '+f.name)}catch(err){info(kindOf(f.name)+'-Datei konnte nicht gelesen werden.\n'+(err.message||err))}};
 
 /* Excel-Datei dauerhaft verbinden (Edge/Chrome) */
 const FS='showSaveFilePicker' in window;
@@ -676,48 +687,50 @@ const idb={
   async set(k,v){const db=await this.open();return new Promise(res=>{const tx=db.transaction('h','readwrite');tx.objectStore('h').put(v,k);tx.oncomplete=()=>res();tx.onerror=()=>res()})}
 };
 const XTYPES=[{description:'Excel-Arbeitsmappe',accept:{'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':['.xlsx']}}];
+const JTYPES=[{description:'Cockpit-Daten (JSON)',accept:{'application/json':['.json']}}];
+const ATYPES=[{description:'Cockpit-Daten (JSON oder Excel)',accept:{'application/json':['.json'],'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':['.xlsx']}}];
 async function writeFile(){
   if(DESK)return deskWrite();
   if(!fileHandle)return;
-  try{const w=await fileHandle.createWritable();await w.write(xlsxBytes());await w.close();lastMod=(await fileHandle.getFile()).lastModified;S.meta.lastWrite=lastMod;cacheLocal();UI.fileState='ok';UI.fileErr=''}
+  try{const w=await fileHandle.createWritable();await w.write(isJson(fileHandle.name)?dataJson():xlsxBytes());await w.close();lastMod=(await fileHandle.getFile()).lastModified;S.meta.lastWrite=lastMod;cacheLocal();UI.fileState='ok';UI.fileErr=''}
   catch(e){UI.fileState='err';UI.fileErr=(e&&e.name==='NoModificationAllowedError'||/lock|in use|busy/i.test(e?.message||''))?'Datei ist vermutlich in Excel geöffnet':'Speichern fehlgeschlagen'}
   renderStore();
 }
 async function readFileInto(h,ask){
-  const f=await h.getFile();const N=fromWorkbook(XLSX.read(await f.arrayBuffer(),{type:'array'}));
-  if(ask&&!await askP(`„${f.name}“ laden?\n${N.projects.length} Projekte · ${N.events.length} Events · ${N.todos.length} ToDos\n\nDie aktuellen Daten im Cockpit werden ersetzt.`))return false;
+  const f=await h.getFile();const N=isJson(f.name)?parseJson(await f.text()):fromWorkbook(XLSX.read(await f.arrayBuffer(),{type:'array'}));
+  if(ask&&!await askP(`„${f.name}“ laden?\n${summary(N)}\n\nDie aktuellen Daten im Cockpit werden ersetzt.`))return false;
   load(N);lastMod=f.lastModified;S.meta.lastWrite=lastMod;cacheLocal();UI.sel=null;render();return true;
 }
-async function newFile(){closeModal();try{fileHandle=await showSaveFilePicker({suggestedName:'Projekt-Cockpit.xlsx',types:XTYPES});pendingHandle=null;await idb.set('file',fileHandle);await writeFile();toast('Excel-Datei verbunden – jede Änderung wird dort gespeichert.')}catch(e){}renderStore()}
+async function newFile(kind){closeModal();const j=kind!=='xlsx';try{fileHandle=await showSaveFilePicker({suggestedName:'Projekt-Cockpit'+(j?'.json':'.xlsx'),types:j?JTYPES:XTYPES});pendingHandle=null;await idb.set('file',fileHandle);await writeFile();toast(kindOf(fileHandle.name)+'-Datei verbunden – jede Änderung wird dort gespeichert.')}catch(e){}renderStore()}
 async function openFile(){
   closeModal();
-  try{const [h]=await showOpenFilePicker({types:XTYPES});
+  try{const [h]=await showOpenFilePicker({types:ATYPES});
     if(await h.requestPermission({mode:'readwrite'})!=='granted'){toast('Schreibrecht verweigert.');return}
-    if(!await readFileInto(h,true))return;fileHandle=h;pendingHandle=null;await idb.set('file',h);toast('Excel-Datei geöffnet und verbunden.')}
-  catch(e){if(e&&e.name!=='AbortError')info('Excel-Datei konnte nicht gelesen werden.\n'+(e.message||e))}
+    if(!await readFileInto(h,true))return;fileHandle=h;pendingHandle=null;await idb.set('file',h);toast(kindOf(h.name)+'-Datei geöffnet und verbunden.')}
+  catch(e){if(e&&e.name!=='AbortError')info('Datei konnte nicht gelesen werden.\n'+(e.message||e))}
   renderStore();
 }
 async function syncFromFile(){ // Excel-Datei neuer als letzter eigener Speichervorgang? → übernehmen
   try{const f=await fileHandle.getFile();
-    if(f.lastModified>(S.meta.lastWrite||0)+2000){await readFileInto(fileHandle,false);toast('Änderungen aus Excel übernommen.')}
+    if(f.lastModified>(S.meta.lastWrite||0)+2000){await readFileInto(fileHandle,false);toast('Änderungen aus der Datendatei übernommen.')}
     else{lastMod=f.lastModified}}
   catch(e){UI.fileState='err';UI.fileErr='Datei nicht lesbar';renderStore()}
 }
-async function reloadFromFile(){if(DESK){if(DK.path)deskRead(DK.path,false).then(ok=>ok&&toast('Neu aus Excel geladen.'));return}if(!fileHandle)return;try{await readFileInto(fileHandle,false);toast('Neu aus Excel geladen.')}catch(e){info('Excel-Datei konnte nicht gelesen werden.\n'+(e.message||e))}}
+async function reloadFromFile(){if(DESK){if(DK.path)deskRead(DK.path,false).then(ok=>ok&&toast('Neu aus der Datendatei geladen.'));return}if(!fileHandle)return;try{await readFileInto(fileHandle,false);toast('Neu aus der Datendatei geladen.')}catch(e){info('Excel-Datei konnte nicht gelesen werden.\n'+(e.message||e))}}
 async function reconnect(){if(!pendingHandle)return;try{if(await pendingHandle.requestPermission({mode:'readwrite'})==='granted'){fileHandle=pendingHandle;pendingHandle=null;await syncFromFile()}}catch(e){}renderStore()}
-window.addEventListener('focus',async()=>{if(DESK)return deskFocus();if(!fileHandle)return;try{const f=await fileHandle.getFile();if(f.lastModified>lastMod+2000&&f.lastModified>(S.meta.lastWrite||0)+2000){await readFileInto(fileHandle,false);toast('Änderungen aus Excel übernommen.')}}catch(e){}});
+window.addEventListener('focus',async()=>{if(DESK)return deskFocus();if(!fileHandle)return;try{const f=await fileHandle.getFile();if(f.lastModified>lastMod+2000&&f.lastModified>(S.meta.lastWrite||0)+2000){await readFileInto(fileHandle,false);toast('Änderungen aus der Datendatei übernommen.')}}catch(e){}});
+const DATA_HELP=`<p>Wähle eine Datendatei, z. B. auf dem Netzlaufwerk oder in OneDrive. Jede Änderung im Cockpit wird automatisch dort gespeichert, und beim nächsten Start geht es dort weiter.</p>
+   <p><b>JSON (empfohlen)</b> speichert alles vollständig – auch die Historie mit Wiederherstellungsständen – und kann nicht durch eine geöffnete Excel gesperrt werden. Zum Lesen und Weitergeben gibt es jederzeit den <b>Excel-Export</b>.</p>
+   <p><b>Excel</b> als Datendatei geht weiterhin: Du kannst sie direkt in Excel bearbeiten; Änderungen werden übernommen, sobald du ins Cockpit zurückwechselst. Excel sperrt geöffnete Dateien – dann kann das Cockpit nicht speichern.</p>`;
 function fileDialog(){if(DESK)return deskDialog();
-  modal('Excel-Datei als Datenbasis',`<p>Verbinde eine Excel-Datei, z. B. auf dem Netzlaufwerk oder in OneDrive. Jede Änderung im Cockpit wird automatisch dort gespeichert – mit eigenen Blättern für ToDos, Events, Projekte, Phasen, Abteilungen und das Protokoll.</p>
-   <p>Du kannst die Datei auch direkt in Excel bearbeiten. Sobald du sie speicherst und ins Cockpit zurückwechselst, werden die Änderungen übernommen.</p>
-   <p class="muted">Wichtig: Excel sperrt geöffnete Dateien. Schließe die Datei in Excel, während du im Cockpit arbeitest.</p>`,
-  [{l:'Abbrechen',f:closeModal},{l:'Bestehende Excel öffnen',f:openFile},{l:'Neue Excel anlegen',c:'pri',f:newFile}]);
+  modal('Datendatei',DATA_HELP,[{l:'Abbrechen',f:closeModal},{l:'Bestehende öffnen',f:openFile},{l:'Neue Excel',f:()=>newFile('xlsx')},{l:'Neue JSON-Datei',c:'pri',f:()=>newFile('json')}]);
 }
 function renderStore(){if(DESK)return deskRenderStore();
   const s=$('#store'),b=$('#storeBtns');
-  if(fileHandle){s.innerHTML=`<span class="sdot ${UI.fileState==='err'?'err':'ok'}"></span>Excel: <b>${esc(fileHandle.name)}</b>${UI.fileState==='err'?`<br><span class="late">${esc(UI.fileErr)}</span>`:''}`;
-    b.innerHTML=`${UI.fileState==='err'?'<button class="sm pri" onclick="writeFile()">Erneut speichern</button>':''}<button class="sm" onclick="reloadFromFile()">Aus Excel neu laden</button><button class="sm" onclick="fileDialog()">Wechseln</button>`}
-  else{s.innerHTML=`<span class="sdot"></span>Keine Excel-Datei verbunden`;
-    b.innerHTML=pendingHandle?`<button class="sm pri" onclick="reconnect()">Excel wieder verbinden</button>`:FS?`<button class="sm pri" onclick="fileDialog()">Excel-Datei verbinden…</button>`:`<span class="muted">Dieser Browser kann keine Datei verbinden – bitte Excel-Export nutzen (Edge/Chrome empfohlen).</span>`}
+  if(fileHandle){s.innerHTML=`<span class="sdot ${UI.fileState==='err'?'err':'ok'}"></span>${kindOf(fileHandle.name)}: <b>${esc(fileHandle.name)}</b>${UI.fileState==='err'?`<br><span class="late">${esc(UI.fileErr)}</span>`:''}`;
+    b.innerHTML=`${UI.fileState==='err'?'<button class="sm pri" onclick="writeFile()">Erneut speichern</button>':''}<button class="sm" onclick="reloadFromFile()">Neu laden</button><button class="sm" onclick="fileDialog()">Wechseln</button>`}
+  else{s.innerHTML=`<span class="sdot"></span>Keine Datendatei verbunden`;
+    b.innerHTML=pendingHandle?`<button class="sm pri" onclick="reconnect()">Datei wieder verbinden</button>`:FS?`<button class="sm pri" onclick="fileDialog()">Datendatei verbinden…</button>`:`<span class="muted">Dieser Browser kann keine Datei verbinden – bitte JSON- oder Excel-Export nutzen (Edge/Chrome empfohlen).</span>`}
 }
 
 /* ================= Desktop-Programm: Excel-Datei über Python ================= */
@@ -730,23 +743,26 @@ async function deskInit(){if(!await deskReady){UI.fileState='err';UI.fileErr='Pr
       if(Date.parse(S.meta.saved||0)>(S.meta.lastWrite||0)+1500)await deskWrite()}}}catch(e){}
   render()}
 async function deskRead(path,ask){try{const r=await API().read_b64(path);if(!r||!r.ok)throw new Error(r?.error||'unbekannt');
-    const N=fromWorkbook(XLSX.read(r.b64,{type:'base64'}));
-    if(ask&&!await askP(`„${baseName(path)}“ laden?\n${N.projects.length} Projekte · ${N.events.length} Events · ${N.todos.length} ToDos\n\nDie aktuellen Daten im Cockpit werden ersetzt.`))return false;
+    const N=isJson(path)?parseJson(b64utf8(r.b64)):fromWorkbook(XLSX.read(r.b64,{type:'base64'}));
+    if(ask&&!await askP(`„${baseName(path)}“ laden?\n${summary(N)}\n\nDie aktuellen Daten im Cockpit werden ersetzt.`))return false;
     load(N);DK.path=path;DK.mtime=r.mtime;S.meta.lastWrite=r.mtime;cacheLocal();UI.sel=null;UI.fileState='ok';UI.fileErr='';await API().set_config('dataPath',path);render();return true}
-  catch(e){info('Excel-Datei konnte nicht gelesen werden.\n'+(e.message||e));return false}}
+  catch(e){info(kindOf(path)+'-Datei konnte nicht gelesen werden.\n'+(e.message||e));return false}}
 async function deskWrite(){if(!DK.path)return;
-  try{const r=await API().write_b64(DK.path,XLSX.write(toWorkbook(),{bookType:'xlsx',type:'base64',compression:true}));
-    if(r&&r.ok){DK.mtime=r.mtime;S.meta.lastWrite=r.mtime;cacheLocal();UI.fileState='ok';UI.fileErr=''}else{UI.fileState='err';UI.fileErr=r?.locked?'Datei ist in Excel geöffnet – bitte dort schließen':(r?.error||'Speichern fehlgeschlagen')}}
+  try{const r=await API().write_b64(DK.path,isJson(DK.path)?utf8b64(dataJson()):XLSX.write(toWorkbook(),{bookType:'xlsx',type:'base64',compression:true}));
+    if(r&&r.ok){DK.mtime=r.mtime;S.meta.lastWrite=r.mtime;cacheLocal();UI.fileState='ok';UI.fileErr=''}else{UI.fileState='err';UI.fileErr=r?.locked?(isJson(DK.path)?'Datei ist gesperrt (von einem anderen Programm geöffnet?)':'Datei ist in Excel geöffnet – bitte dort schließen'):(r?.error||'Speichern fehlgeschlagen')}}
   catch(e){UI.fileState='err';UI.fileErr='Speichern fehlgeschlagen'}renderStore()}
-async function deskFocus(){if(!DK.path||!await deskReady)return;try{const m=await API().mtime(DK.path);if(m&&m>DK.mtime+2000&&m>(S.meta.lastWrite||0)+2000){if(await deskRead(DK.path,false))toast('Änderungen aus Excel übernommen.')}else if(UI.fileState==='err'&&/geöffnet/.test(UI.fileErr))deskWrite()}catch(e){}}
-function deskDialog(){modal('Excel-Datei als Datenbasis',`<p>Wähle eine Excel-Datei, z. B. auf dem Netzlaufwerk. Jede Änderung im Cockpit wird automatisch dort gespeichert. Das Programm merkt sich die Datei und öffnet sie beim nächsten Start wieder.</p>
-   <p>Bearbeitest du die Datei in Excel, übernimmt das Cockpit die Änderungen, sobald du zurückwechselst.</p><p class="muted">Excel sperrt geöffnete Dateien – schließe sie dort, während du im Cockpit arbeitest. Vor dem ersten Speichern jedes Tages legt das Programm eine Sicherungskopie an.</p>`,
-  [{l:'Abbrechen',f:closeModal},{l:'Bestehende Excel öffnen',f:async()=>{closeModal();const p=await API().choose_data_file(false);if(p)deskRead(p,true)}},
-   {l:'Neue Excel anlegen',c:'pri',f:async()=>{closeModal();const p=await API().choose_data_file(true);if(!p)return;DK.path=p;await API().set_config('dataPath',p);await deskWrite();if(UI.fileState==='ok')toast('Excel-Datei angelegt – Änderungen werden dort gespeichert.')}}])}
+async function deskFocus(){if(!DK.path||!await deskReady)return;try{const m=await API().mtime(DK.path);if(m&&m>DK.mtime+2000&&m>(S.meta.lastWrite||0)+2000){if(await deskRead(DK.path,false))toast('Änderungen aus der Datendatei übernommen.')}else if(UI.fileState==='err'&&/geöffnet/.test(UI.fileErr))deskWrite()}catch(e){}}
+async function deskNew(kind,conv){closeModal();const p=await API().choose_data_file(true,kind);if(!p)return;const old=DK.path;DK.path=p;await API().set_config('dataPath',p);await deskWrite();
+  if(UI.fileState==='ok'){if(conv)S.log.unshift(logEntry('umgestellt','system',null,`Datendatei auf ${kindOf(p)} umgestellt: ${baseName(old)} → ${baseName(p)}`));persist();
+    toast(conv?`Umgestellt – gespeichert wird jetzt in ${baseName(p)}. Die bisherige Datei bleibt unverändert erhalten.`:`${kindOf(p)}-Datei angelegt – Änderungen werden dort gespeichert.`)}}
+function deskDialog(){const conv=DK.path&&!isJson(DK.path);
+  modal('Datendatei',DATA_HELP+`<p class="muted">Das Programm merkt sich die Datei und öffnet sie beim nächsten Start wieder. Vor dem ersten Speichern jedes Tages legt es eine Sicherungskopie an.</p>${conv?`<p><b>Du arbeitest gerade mit einer Excel-Datei.</b> „Auf JSON umstellen“ übernimmt alles in eine neue JSON-Datei; die Excel-Datei bleibt unverändert als Kopie erhalten.</p>`:''}`,
+  [{l:'Abbrechen',f:closeModal},{l:'Bestehende öffnen',f:async()=>{closeModal();const p=await API().choose_data_file(false);if(p)deskRead(p,true)}},
+   ...(conv?[{l:'Auf JSON umstellen',c:'pri',f:()=>deskNew('json',true)}]:[{l:'Neue Excel',f:()=>deskNew('xlsx')},{l:'Neue JSON-Datei',c:'pri',f:()=>deskNew('json')}])])}
 function deskRenderStore(){const s=$('#store'),b=$('#storeBtns');if(!s)return;
-  if(DK.path){s.innerHTML=`<span class="sdot ${UI.fileState==='err'?'err':'ok'}"></span>Excel: <b title="${esc(DK.path)}">${esc(baseName(DK.path))}</b>${UI.fileState==='err'?`<br><span class="late">${esc(UI.fileErr)}</span>`:''}`;
-    b.innerHTML=`${UI.fileState==='err'?'<button class="sm pri" onclick="deskWrite()">Erneut speichern</button>':''}<button class="sm" onclick="openLink(DK.path)" title="In Excel öffnen">In Excel</button><button class="sm" onclick="reloadFromFile()">Neu laden</button><button class="sm" onclick="fileDialog()">Wechseln</button>`}
-  else{s.innerHTML=`<span class="sdot"></span>Keine Excel-Datei verbunden`;b.innerHTML=`<button class="sm pri" onclick="fileDialog()">Excel-Datei wählen…</button>`}}
+  if(DK.path){s.innerHTML=`<span class="sdot ${UI.fileState==='err'?'err':'ok'}"></span>${kindOf(DK.path)}: <b title="${esc(DK.path)}">${esc(baseName(DK.path))}</b>${UI.fileState==='err'?`<br><span class="late">${esc(UI.fileErr)}</span>`:''}`;
+    b.innerHTML=`${UI.fileState==='err'?'<button class="sm pri" onclick="deskWrite()">Erneut speichern</button>':''}${isJson(DK.path)?`<button class="sm" onclick="revealLink(DK.path)" title="Ordner im Explorer zeigen">Ordner</button>`:`<button class="sm" onclick="openLink(DK.path)" title="In Excel öffnen">In Excel</button>`}<button class="sm" onclick="reloadFromFile()">Neu laden</button><button class="sm ${isJson(DK.path)?'':'pri'}" onclick="fileDialog()">${isJson(DK.path)?'Wechseln':'Wechseln / auf JSON'}</button>`}
+  else{s.innerHTML=`<span class="sdot"></span>Keine Datendatei verbunden`;b.innerHTML=`<button class="sm pri" onclick="fileDialog()">Datendatei wählen…</button>`}}
 /* ================= Toast & Modal ================= */
 let toastT;
 function toast(msg,label,fn){const t=$('#toast');t.innerHTML=esc(msg);if(label){const b=document.createElement('button');b.className='sm';b.textContent=label;b.onclick=()=>{t.style.display='none';fn()};t.appendChild(b)}t.style.display='flex';clearTimeout(toastT);toastT=setTimeout(()=>t.style.display='none',label?7000:3200)}
@@ -1974,7 +1990,7 @@ function help(){modal('Kurzanleitung',`<div class="help">
  <table><tr><td><code>@Name</code></td><td>Wer (Leerzeichen als _)</td></tr><tr><td><code>#PRJ-A #PRJ-B</code></td><td>ein oder mehrere Projekte (<code>#allgemein</code> = ohne Projekt)</td></tr><tr><td><code>/Einkauf</code></td><td>Abteilung (Namensanfang genügt: <code>/ein</code>)</td></tr>
  <tr><td><code>bis fr</code> <code>morgen</code> <code>+3</code> <code>+2w</code> <code>14.11.</code></td><td>Fälligkeit</td></tr><tr><td><code>!hoch</code> <code>!niedrig</code></td><td>Priorität</td></tr><tr><td><code>*Text</code></td><td>Event statt ToDo</td></tr></table>
  <p>Beispiel: <code>Muster Material B anfragen @Lieferant_X #PRJ-A /Einkauf bis fr !hoch</code></p>
- <p><b>Excel:</b> „Excel-Datei verbinden“ macht eine .xlsx-Datei zur Datenbasis – jede Änderung wird automatisch gespeichert (Edge/Chrome). Die Datei kann in Excel bearbeitet und ausgewertet werden; beim Zurückwechseln übernimmt das Cockpit die Änderungen. Excel-Export/-Import funktioniert in jedem Browser.</p>
+ <p><b>Datendatei:</b> „Datendatei wählen/verbinden“ legt fest, wo gespeichert wird – jede Änderung landet automatisch dort. <b>JSON (empfohlen)</b> speichert alles vollständig, inkl. Historie mit Wiederherstellungsständen, und wird nie durch eine geöffnete Excel gesperrt. <b>Excel (.xlsx)</b> geht weiterhin als Datendatei und kann direkt in Excel bearbeitet werden. Eine bestehende Excel-Datendatei stellst du über „Wechseln / auf JSON“ um. <b>Excel-Export</b> erzeugt jederzeit eine lesbare Excel-Datei zum Weitergeben, <b>JSON-Export</b> eine vollständige Sicherung; <b>Import</b> liest beides ein.</p>
  <p><b>Tasten:</b> <code>N</code> Schnellerfassung · <code>1</code>–<code>4</code> Ansicht · <code>Esc</code> schließen</p>
  <p><b>Filter links:</b> Klick blendet Projekt/Abteilung ein oder aus, Doppelklick zeigt nur dieses.</p></div>`,[{l:'Verstanden',c:'pri',f:closeModal}])}
 

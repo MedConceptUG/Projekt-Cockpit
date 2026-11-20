@@ -274,14 +274,17 @@ class Api:
                 "pywebview": getattr(webview, "__version__", "?")}
 
     # ---------- Excel-Datenbasis ----------
-    def choose_data_file(self, new):
-        types = ("Excel-Arbeitsmappe (*.xlsx)",)
+    def choose_data_file(self, new, kind="json"):
+        """Datendatei wählen: JSON (empfohlen, vollständig) oder Excel."""
         if new:
-            p = self._save_dialog("Projekt-Cockpit.xlsx", types)
+            ext = ".xlsx" if kind == "xlsx" else ".json"
+            types = ("Excel-Arbeitsmappe (*.xlsx)",) if ext == ".xlsx" else ("Cockpit-Daten (*.json)",)
+            p = self._save_dialog("Projekt-Cockpit" + ext, types)
             if not p:
                 return None
-            return p if p.lower().endswith(".xlsx") else p + ".xlsx"
-        r = self._open_dialog(False, types, title="Cockpit-Excel öffnen")
+            return p if p.lower().endswith(ext) else p + ext
+        types = ("Cockpit-Daten (*.json *.xlsx)", "Cockpit-Daten JSON (*.json)", "Excel-Arbeitsmappe (*.xlsx)")
+        r = self._open_dialog(False, types, title="Cockpit-Datendatei öffnen")
         return r[0] if r else None
 
     def mtime(self, path):
@@ -305,11 +308,12 @@ class Api:
             return
         bdir = os.path.join(app_dir(), "Sicherungen")
         os.makedirs(bdir, exist_ok=True)
-        stem = os.path.splitext(os.path.basename(p))[0]
-        target = os.path.join(bdir, f"{stem}_{dt.date.today():%Y-%m-%d}.xlsx")
+        stem, ext = os.path.splitext(os.path.basename(p))
+        ext = ext.lower() or ".dat"
+        target = os.path.join(bdir, f"{stem}_{dt.date.today():%Y-%m-%d}{ext}")
         if not os.path.exists(target):
             shutil.copy2(p, target)
-            olds = sorted(f for f in os.listdir(bdir) if f.startswith(stem + "_") and f.endswith(".xlsx"))
+            olds = sorted(f for f in os.listdir(bdir) if f.startswith(stem + "_") and f.lower().endswith(ext))
             for f in olds[:-30]:
                 try:
                     os.remove(os.path.join(bdir, f))
