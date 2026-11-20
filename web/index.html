@@ -1144,8 +1144,22 @@ function saveProject(id){
   const depts=[...old.filter(x=>chosen.includes(x)),...chosen.filter(x=>!old.includes(x))];
   const d={name,code:$('#f_code').value.trim(),color:$('#f_color').value,status:$('#f_pstatus').value,owner:$('#f_owner').value.trim(),goal:$('#f_goal').value,phases,depts,links:LE.slice()};
   closeModal();
+  /* abgewählte Abteilung hat noch Einträge in diesem Projekt? → fragen, wohin damit (sonst bliebe die Zeile im Gantt stehen) */
+  if(id){const rem=old.filter(x=>!chosen.includes(x)).map(dep=>({dep,items:[...S.todos,...S.events].filter(x=>inP(x,id)&&(x.deptId||'')===dep)})).filter(c=>c.items.length);
+    if(rem.length){const opts=dep=>`<option value="__keep">nicht entfernen – Abteilung bleibt im Projekt</option>${depts.filter(x=>x!==dep&&D(x)).map(x=>`<option value="${x}">verschieben nach: ${esc(D(x).name)}</option>`).join('')}${S.depts.filter(x=>x.id!==dep&&!depts.includes(x.id)).map(x=>`<option value="${x.id}">verschieben nach: ${esc(x.name)} (nicht im Projekt)</option>`).join('')}<option value="__del">aus dem Projekt entfernen (ToDos/Events nur in diesem Projekt werden gelöscht)</option>`;
+      modal('Abteilung aus dem Projekt nehmen',`<p>Die abgewählte Abteilung hat in „${esc(d.name)}“ noch Einträge. Solange sie dort ToDos oder Events hat, bleibt ihre Zeile im Gantt stehen. Was soll damit passieren?</p>
+        ${rem.map(c=>`<div style="margin:10px 0"><b>${esc(D(c.dep)?.name||'?')}</b> – ${c.items.length} Einträge: <span class="muted">${c.items.slice(0,4).map(x=>esc(trunc(x.title,30))).join(', ')}${c.items.length>4?' …':''}</span><br><select id="rm_${c.dep}" style="margin-top:4px;width:100%">${opts(c.dep)}</select></div>`).join('')}
+        <p class="muted" style="font-size:12.5px">Verschieben ändert die Abteilung der Einträge – gehören sie auch zu anderen Projekten, gilt das dort ebenso. Mit Strg+Z lässt sich alles rückgängig machen.</p>`,
+        [{l:'Abbrechen',f:closeModal},{l:'Übernehmen',c:'pri',f:()=>{const msg=[];
+          rem.forEach(c=>{const v=$('#rm_'+c.dep).value,dn=D(c.dep)?.name||'?';
+            if(v==='__keep'){if(!d.depts.includes(c.dep))d.depts.push(c.dep);return}
+            if(v==='__del'){let del=0,rm=0;c.items.forEach(x=>{if(pids(x).length>1){x.projectIds=pids(x).filter(i=>i!==id);x.projectId=x.projectIds[0]||'';rm++}else{if(T(x.id))S.todos=S.todos.filter(t=>t!==x);else{S.events=S.events.filter(e=>e!==x);S.todos.forEach(t=>{if(t.eventId===x.id)t.eventId='';if(t.endEventId===x.id)t.endEventId=''})}del++}});msg.push(`${dn}: ${del} gelöscht${rm?', '+rm+' nur aus dem Projekt genommen':''}`);return}
+            c.items.forEach(x=>x.deptId=v);if(!d.depts.includes(v))d.depts.push(v);msg.push(`${dn}: ${c.items.length} Einträge → ${D(v)?.name}`)});
+          closeModal();applyProjectSave(id,d,msg)}}]);return}}
+  applyProjectSave(id,d,[])}
+function applyProjectSave(id,d,extra){
   if(id){const p=P(id);const ch=[];if(p.name!==d.name)ch.push(`Name: ${p.name} → ${d.name}`);if(p.status!==d.status)ch.push(`Status: ${PSTAT[p.status]} → ${PSTAT[d.status]}`);if(JSON.stringify(p.phases)!==JSON.stringify(d.phases))ch.push('Phasen angepasst');if(JSON.stringify(p.links||[])!==JSON.stringify(d.links))ch.push('Links: '+linkDiff(p.links||[],d.links));if(JSON.stringify(p.depts)!==JSON.stringify(d.depts))ch.push('Abteilungen: '+d.depts.map(x=>D(x)?.name).join(', '));
-    Object.assign(p,d);if(ch.length)commit('geändert','project',p,`${p.name} – ${ch.join('; ')}`);else{persist();render()}}
+    ch.push(...extra);Object.assign(p,d);if(ch.length)commit('geändert','project',p,`${p.name} – ${ch.join('; ')}`);else{persist();render()}}
   else{const p={id:uid(),created:TODAY(),...d};S.projects.push(p);commit('angelegt','project',p,p.name)}
 }
 async function delProject(id){const p=P(id);const n=[...S.events,...S.todos].filter(x=>pids(x).length===1&&pids(x)[0]===id).length;
