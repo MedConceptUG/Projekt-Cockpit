@@ -187,10 +187,11 @@ svg.arrows{position:absolute;left:0;top:0;pointer-events:none;z-index:2;overflow
 .bar.wartet{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--c) 25%,var(--panel)) 0 6px,color-mix(in srgb,var(--wait) 22%,var(--panel)) 6px 12px)}
 .bar.arbeit{background:color-mix(in srgb,var(--c) 55%,var(--panel))}
 .bar.late{border:2px solid var(--late)}
-.bar .who{width:16px;height:16px;border-radius:50%;background:var(--c);color:#fff;font-size:8.5px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none;letter-spacing:-.3px}
+.bar .who{height:16px;min-width:16px;padding:0 5px;box-sizing:border-box;border-radius:8px;background:var(--c);color:#fff;font-size:9px;font-weight:700;line-height:16px;flex:none;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:.2px}
 .bl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .bl.out{position:absolute;left:calc(100% + 6px);top:1px;max-width:230px;color:var(--ink)}
 .bl em{font-style:normal;color:var(--muted)}
+.bar .bl.out{display:flex;align-items:center;max-width:300px}.bar .bl.out>*{flex:none}.bar .bl.out>.blt{flex:0 1 auto;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .evm{position:absolute;width:22px;height:22px;top:0;border-radius:50%;background:var(--panel);border:2px solid color-mix(in srgb,var(--c) 70%,transparent);cursor:pointer;z-index:3;display:flex;align-items:center;justify-content:center;margin-top:-1px}
 .evm .em{font-size:12px;line-height:1;filter:saturate(.85)}
 .evm.sig-kritisch{border:3px solid var(--late);background:color-mix(in srgb,var(--late) 14%,var(--panel))}
@@ -432,7 +433,7 @@ const WD=['So','Mo','Di','Mi','Do','Fr','Sa'];
 function relDate(s){if(!s)return '';const d=diffDays(TODAY(),s);if(d===0)return 'Heute';if(d===1)return 'Morgen';if(d===-1)return 'Gestern';if(d<0)return `vor ${-d} T.`;if(d<7)return WD[new Date(s+'T12:00:00').getDay()]+' '+fmt(s).slice(0,5);return fmt(s)}
 function kw(s){const d=new Date(s+'T12:00:00');d.setDate(d.getDate()+3-((d.getDay()+6)%7));const w1=new Date(d.getFullYear(),0,4,12);return 1+Math.round(((d-w1)/864e5-3+((w1.getDay()+6)%7))/7)}
 const trunc=(s,n)=>(s=String(s||''),s.length>n?s.slice(0,n-1)+'…':s);
-const initials=w=>String(w||'').split(/[\s,._-]+/).filter(Boolean).slice(0,2).map(x=>x[0].toUpperCase()).join('');
+const initials=w=>String(w||'').split(/\s*(?:[,;/&+]|\bund\b)\s*/i).map(x=>x.trim()).filter(Boolean).map(x=>x.length<=3?x.toUpperCase():x).join(', ');
 
 const STATUS={offen:'Offen',arbeit:'In Arbeit',wartet:'Wartet',erledigt:'Erledigt'};
 const DEFAULT_TYPES=[['mail','📧','Mail','neutral'],['telefonat','📞','Telefonat','neutral'],['meeting','👥','Meeting','neutral'],['person','👤','Person','neutral'],['lieferant','🏭','Lieferant','neutral'],['angebot','💰','Angebot','neutral'],['lieferung','📦','Lieferung','neutral'],['aenderung','🔄','Änderung','neutral'],['entscheidung','⚖️','Entscheidung','neutral'],['befund','🔍','Befund / Ergebnis','neutral'],['freigabe','✅','Freigabe','positiv'],['ablehnung','❌','Ablehnung','kritisch'],['risiko','⚠️','Risiko','kritisch'],['problem','❗','Problem / Abweichung','kritisch'],['meilenstein','🚩','Meilenstein','neutral'],['review','📋','Design Review','neutral'],['schulung','🎓','Schulung','neutral'],['info','ℹ️','Info / Notiz','neutral']];
@@ -1337,7 +1338,7 @@ function vGantt(){LW=Math.max(LW_MIN,Math.min(LW_MAX,UI.lw||210));
       S.todos.filter(t=>inP(t,p.id)&&(t.deptId||'')===did&&(t.due||t.start)&&matchQ(t)&&(UI.showDone||t.status!=='erledigt')).forEach(t=>{
         const a=t.start&&t.due?(t.start<=t.due?t.start:t.due):(t.start||t.due),b=t.due||t.start;
         const se=E(t.eventId),ee=t.endEventId!==t.eventId?E(t.endEventId):null;
-        its.push({k:'t',o:t,x1:X(a),x2:X(b)+px,se,ee,du:evDuring(t.id).filter(e=>e.date).sort((u,v)=>u.date.localeCompare(v.date)),lw:lw(t.title+(t.who?' · '+t.who:''))+(se?20:0)+(ee?20:0)})});
+        its.push({k:'t',o:t,x1:X(a),x2:X(b)+px,se,ee,du:evDuring(t.id).filter(e=>e.date).sort((u,v)=>u.date.localeCompare(v.date)),lw:Math.min(310,lw(t.title)+(t.who?initials(t.who).length*6.6+10:0))+(se?20:0)+(ee?20:0)})});
       its.sort((a,b)=>a.x1-b.x1);
       /* Events während eines ToDos stehen untereinander unter dem Balken (je eine Unterzeile) */
       const occ=[],free1=(r,a,b)=>!(occ[r]||[]).some(([x,e])=>a<e+6&&b+6>x),free=(r,it)=>free1(r,it.x1,it.end)&&it.du.every((_,k)=>free1(r+1+k,it.x1,it.dend)),
@@ -1356,7 +1357,7 @@ function vGantt(){LW=Math.max(LW_MIN,Math.min(LW_MAX,UI.lw||210));
             ico+=evIco(e,'du',`left:${cx-8}px`,ex(e))})}const mp=pids(o).length>1?`<em class="mp" title="betrifft ${pids(o).length} Projekte">⧉${pids(o).length}</em>`:'';
         if(it.k==='e'){let sg=sigOf(o);const co=critOpen(o);if(sg==='kritisch'&&!co&&critResolved(o))sg='erledigt';return `<div class="evm sig-${sg} ${co?'copen':''} ${sel} ${dim}" style="left:${it.x1}px;top:${top}px;--c:${dc}" data-id="${o.id}" data-r="${it.r}" onmouseenter="hov('${o.id}',1)" onmouseleave="hov('${o.id}',0)" onclick="event.stopPropagation();selItem('${o.id}')" ondblclick="editEvent('${o.id}')" title="${esc(fmt(o.date)+' · '+tLabel(o.type)+' · '+(SIG[sg]||'kritisch – erledigt')+(co?' – noch keine Maßnahme!':'')+' · '+o.title+(o.who?' · '+o.who:''))}"><span class="em">${TICON[o.type]||'•'}</span><i class="cn" title="Ziehen, um mit einem anderen Punkt zu verbinden"></i><span class="bl out">${lkBadge(o,'in')}${esc(o.title)}${mp}</span></div>`}
         const late=o.status!=='erledigt'&&o.due&&o.due<td;const w=Math.max(8,it.x2-it.x1);
-        return `<div class="bar ${o.status} ${late?'late':''} ${sel} ${dim}${icl}" style="left:${it.x1}px;top:${top}px;width:${w}px;--c:${dc}" data-id="${o.id}" data-r="${it.r}" onmouseenter="hov('${o.id}',1)" onmouseleave="hov('${o.id}',0)" onclick="event.stopPropagation();selItem('${o.id}')" ondblclick="editTodo('${o.id}')" title="${esc(o.title+(o.who?' · Wer: '+o.who:'')+' · '+fmt(o.start)+' – '+fmt(o.due)+' · '+STATUS[o.status])}"><i class="hd l" data-mode="start" title="Start ziehen"></i><i class="hd r" data-mode="end" title="Ende ziehen"></i><i class="cn" title="Ziehen, um mit einem anderen Punkt zu verbinden"></i>${ico}${o.who&&w>=26?`<span class="who">${esc(initials(o.who))}</span>`:''}<span class="bl ${it.inside?'':'out'}">${ckBadge(o)}${lkBadge(o,'in')}${esc(o.title)}${o.who?` <em>· ${esc(o.who)}</em>`:''}${mp}</span></div>`}).join('');
+        return `<div class="bar ${o.status} ${late?'late':''} ${sel} ${dim}${icl}" style="left:${it.x1}px;top:${top}px;width:${w}px;--c:${dc}" data-id="${o.id}" data-r="${it.r}" onmouseenter="hov('${o.id}',1)" onmouseleave="hov('${o.id}',0)" onclick="event.stopPropagation();selItem('${o.id}')" ondblclick="editTodo('${o.id}')" title="${esc(o.title+(o.who?' · Wer: '+o.who:'')+' · '+fmt(o.start)+' – '+fmt(o.due)+' · '+STATUS[o.status])}"><i class="hd l" data-mode="start" title="Start ziehen"></i><i class="hd r" data-mode="end" title="Ende ziehen"></i><i class="cn" title="Ziehen, um mit einem anderen Punkt zu verbinden"></i>${ico}${o.who&&it.inside&&w>=26?`<span class="who" title="${esc(o.who)}">${esc(initials(o.who))}</span>`:''}<span class="bl ${it.inside?'':'out'}">${ckBadge(o)}${lkBadge(o,'in')}<span class="blt">${esc(o.title)}</span>${o.who&&!(it.inside&&w>=26)?`<em class="blw">&nbsp;· ${esc(initials(o.who))}</em>`:''}${mp}</span></div>`}).join('');
       /* Bezeichnungen links, jeweils auf Höhe ihrer Zeile */
       let rl='';for(let r=0;r<occ.length;r++){const L=its.filter(it=>it.r===r);
         if(L.length){L.sort((a,b)=>((a.k==='t'&&a.o.status==='erledigt')-(b.k==='t'&&b.o.status==='erledigt')));const tx=L.map(it=>it.k==='t'?`<span class="rt ${it.o.status} ${it.o.status!=='erledigt'&&it.o.due&&it.o.due<td?'late':''}">${esc(it.o.title)}</span>`:`<span class="rt ev">${TICON[it.o.type]||'•'} ${esc(it.o.title)}</span>`).join('<i> · </i>');
