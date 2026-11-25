@@ -567,7 +567,7 @@ function persist(){undoTrack();S.meta.saved=new Date().toISOString();cacheLocal(
 function load(d){S.projects=d.projects||[];S.depts=d.depts||[];S.events=d.events||[];S.todos=d.todos||[];S.log=d.log||[];S.meta=Object.assign({user:'Ich'},d.meta||{});
   if(!S.depts.length)S.depts=DEFAULT_DEPTS.map(([n,c])=>({id:uid(),name:n,color:c}));
   S.templates=d.templates||[];S.vacations=d.vacations||[];S.events.forEach(e=>{e.causes=e.causes||[]});S.todos.forEach(t=>{t.causes=t.causes||[];normSteps(t)});S.projects.forEach(p=>{p.links=p.links||[];p.phases=p.phases||[];p.depts=(p.depts||[]).filter(id=>D(id))});S.types=(d.types&&d.types.length?d.types:DEFAULT_TYPES.map(([key,icon,label,sig])=>({key,icon,label,sig}))).map(t=>({...t}));if(!S.types.some(t=>t.key==='review'))S.types.push({key:'review',icon:'📋',label:'Design Review',sig:'neutral'});S.events.forEach(e=>{if(!S.types.some(t=>t.key===e.type))e.type=S.types.some(t=>t.key==='info')?'info':S.types[0].key});rebuildTypes();[...S.events,...S.todos].forEach(normItem);UNDO.past=[];UNDO.future=[];UNDO.last=dataSnap()}
-function saveUI(){try{const {view,pf,df,zoom,collapsed,showDone,arrows,focus,scale,lw}=UI;localStorage.setItem(UIKEY,JSON.stringify({view,pf,df,zoom,collapsed,showDone,arrows,focus,scale,lw}))}catch(e){}}
+function saveUI(){try{const {view,pf,df,zoom,collapsed,showDone,arrows,focus,scale,lw,ta}=UI;localStorage.setItem(UIKEY,JSON.stringify({view,pf,df,zoom,collapsed,showDone,arrows,focus,scale,lw,ta}))}catch(e){}}
 function loadUI(){try{Object.assign(UI,JSON.parse(localStorage.getItem(UIKEY))||{})}catch(e){}if(!['cockpit','gantt','projects','log'].includes(UI.view))UI.view='cockpit'}
 
 /* ================= Excel ================= */
@@ -767,11 +767,19 @@ function deskRenderStore(){const s=$('#store'),b=$('#storeBtns');if(!s)return;
 /* ================= Toast & Modal ================= */
 let toastT;
 function toast(msg,label,fn){const t=$('#toast');t.innerHTML=esc(msg);if(label){const b=document.createElement('button');b.className='sm';b.textContent=label;b.onclick=()=>{t.style.display='none';fn()};t.appendChild(b)}t.style.display='flex';clearTimeout(toastT);toastT=setTimeout(()=>t.style.display='none',label?7000:3200)}
+/* Größe von Textfeldern (Notizen usw.) merken – pro Feld-ID */
+let TARO=null;
+function taSizes(){if(TARO)TARO.disconnect();const m=UI.ta||{};
+  const tas=[...$('#mBody').querySelectorAll('textarea[id]')];tas.forEach(t=>{if(m[t.id])t.style.height=m[t.id]+'px'});
+  if(!window.ResizeObserver)return;const first=new Set();
+  TARO=new ResizeObserver(es=>es.forEach(e=>{const t=e.target;if(!first.has(t)){first.add(t);return}if(!t.isConnected||!t.offsetHeight)return;
+    const h=Math.round(t.offsetHeight);if((UI.ta||{})[t.id]===h)return;UI.ta={...(UI.ta||{}),[t.id]:h};clearTimeout(taSizes.t);taSizes.t=setTimeout(saveUI,300)}));
+  tas.forEach(t=>TARO.observe(t))}
 function modal(title,body,buttons){
   $('#mTitle').textContent=title;$('#mBody').innerHTML=body;
   const a=$('#mActions');a.innerHTML='';
   buttons.forEach(b=>{const el=document.createElement('button');el.textContent=b.l;el.className=b.c||'';el.onclick=b.f;a.appendChild(el)});
-  $('#modal').classList.add('open');placeDlg();
+  $('#modal').classList.add('open');placeDlg();taSizes();
   setTimeout(()=>$('#mBody').querySelector('input:not([type=checkbox]):not([type=color]),textarea,select')?.focus(),30);
 }
 /* Eigene Dialoge statt confirm/prompt/alert (die in Vorschauen und manchen Firmenbrowsern blockiert sind) */
